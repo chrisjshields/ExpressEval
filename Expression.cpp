@@ -2,20 +2,20 @@
 #include "Expression.h"
 
 /**
- * Evaluate mathematical expression within a string.
+ * Evaluates a mathematical expression within a string
  * 
- * expression: Expression to evaluate (using std::string for substr function - otherwise we would need to malloc and memcopy
+ * expression: Expression to evaluate (using std::string for substr function - otherwise we would need to malloc and memcopy)
  * result: Pointer to location in which to store the result
  * 
- * Returns true on success
+ * Returns: true on success
  */
 bool Expression::Evaluate(const std::string expression, float &result)
 {
+	char op = '+'; // Perform addition first to load initial value
 	float operand = 0;
 	bool operand_set = false;
-	int nested_expression_start_offset = -1;
 	int parentheses_open = 0;
-	char op = '+'; // Perform addition first to load initial value
+	int nested_expression_start_offset = 0;
 	result = 0;
 
 	for (unsigned int i = 0; i < expression.length(); i++)
@@ -24,46 +24,64 @@ bool Expression::Evaluate(const std::string expression, float &result)
 
 		switch (c)
 		{
-		case ' ': break; // Ignore whitespace
-		case '(':
-			// Store starting character offset of opening parentheses and incremement open count
-			if (!parentheses_open)
-				nested_expression_start_offset = i + 1;
-
-			parentheses_open++;
-			break;
-		case ')':
-			// Decrement open parentheses count
-			parentheses_open--;
-
-			if (parentheses_open < 0)
-				return false; // Closed parentheses without corresponding open
-
-			if (!parentheses_open) // If all parentheses have been closed, calculate nested expression 
+			case ' ': break; // Ignore whitespace
+			case '(':
 			{
-				const int nested_expression_length = i - nested_expression_start_offset;
+				// Store starting character offset of opening parentheses and incremement open count
+				if (!parentheses_open++)
+					nested_expression_start_offset = i + 1;
+				break;
+			}
+			case ')':
+			{
+				if (--parentheses_open < 0)
+					return false; // Closed parentheses without corresponding open
 
-				if (nested_expression_length == 0)
+				if (parentheses_open)
+					break; // If original parentheses are still open, continue to next character
+
+				const int nested_expression_length = i - nested_expression_start_offset;
+				if (nested_expression_length < 1)
 					return false; // Empty nested expression
 
 				float sub_result;
-
-				// Recursively call self
 				if (!Evaluate(expression.substr(nested_expression_start_offset, nested_expression_length), sub_result))
-					return false;
+					return false; // Syntax error in nested expression
 
 				// Load operand with result of nested expression
 				operand = sub_result;
 				operand_set = true;
-				nested_expression_start_offset = -1;
-			}
-			break;
-		default:
-			if (parentheses_open) // Skip calculation if parentheses open
 				break;
-
-			if (std::isdigit(c))
+			}
+			case '+':
+			case '-':
+			case '*':
+			case '/':
 			{
+				if (parentheses_open)
+					break; // Continue to next character if parentheses open
+
+				if (!operand_set)
+					return false; // Operation without an operand
+
+				// Perform previous operation (operand input is complete)
+				if (!Calc(op, operand, result))
+					return false; // Divide by zero
+
+				// Reset operand and store new operator for next calculation
+				operand = 0;
+				operand_set = false;
+				op = c;
+				break;
+			}
+			default:
+			{
+				if (parentheses_open)
+					break;  // Continue to next character if parentheses open
+
+				if (!std::isdigit(c))
+					return false; // Not a recognised character
+
 				// Convert character to integer
 				const int digit = c - '0';
 
@@ -71,24 +89,11 @@ bool Expression::Evaluate(const std::string expression, float &result)
 				operand = (operand * 10) + digit;
 				operand_set = true;
 			}
-			else if (operand_set)
-			{
-				if (!Calc(op, operand, result))
-					return false; // Invalid operator or divide by 0
-
-				operand = 0;
-				operand_set = false;
-				op = c;
-			}
-			else
-			{
-				return false; // Not a digit and no operand specified - invalid input
-			}
 		}
 	}
 
 	if (parentheses_open)
-		return false; // Fail if there are open parentheses at end of expression
+		return false; // Open parentheses at end of expression
 
 	// Perform final calculation
 	return Calc(op, operand, result);
@@ -101,7 +106,7 @@ bool Expression::Evaluate(const std::string expression, float &result)
  * operand: Operand for operation
  * total: Running total
  * 
- * Returns true on success
+ * Returns: true on success
  */
 bool Expression::Calc(const char op, const float operand, float &total)
 {
